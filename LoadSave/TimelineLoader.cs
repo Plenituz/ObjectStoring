@@ -1,21 +1,30 @@
-﻿using Newtonsoft.Json;
+﻿//#define LOGGER
+//#define PYTHON
+#if PYTHON
+using PythonRunning;
+#endif
+#if LOGGER
+using Tools;
+#endif
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using NodeSystem.Core;
 using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
-using Tools;
 
 namespace ObjectStoring
 {
+    //TODO check if an attribute is marked with [SaveMe] before LOADING the value into it, 
+    //this could be a problem is a bad boy wants to set a property to a value 
+
     public class TimelineLoader
     {
         /// <summary>
-        /// 
+        /// load a json object from the given path using all our attributes 
         /// </summary>
         /// <param name="path"></param>
-        /// <param name="timeline">should be of type AnimationTimeline</param>
+        /// <returns></returns>
         public static object Load(string path)
         {
             string raw = File.ReadAllText(path);
@@ -32,14 +41,16 @@ namespace ObjectStoring
         /// <returns></returns>
         public static object LoadObjectFromJson(JToken jtoken, Type guessedType = null, object parent = null)
         {
-            //si c'est un jobject, essayer de creer une instance a partir de Type, sinon a partir de guessedType
-            //sinon just chopper la valeur ou la collection
+            //if it's a jobject try to create an instance from it's Type, if it fails use the guessedType
+            //otherwise just use the value or collection
             if(jtoken is JObject jobj)
             {
                 object objInstance = CreateObjectInstance(jobj, guessedType, parent);
                 if(objInstance == null)
                 {
+#if LOGGER
                     Logger.WriteLine("couldn't create an instance of " + jobj + " returning");
+#endif
                     return null;
                 }
                 PopulateObjectInstance(ref objInstance, jobj);
@@ -48,17 +59,21 @@ namespace ObjectStoring
             }
             else if(jtoken is JProperty jprop)
             {
-                //if it's not an array and not a dict, it's just a value
+                //if it's a JProperty, take it's value and run the loading process on it
                 if (jprop.Value is JArray jarray)
                     return LoadArrayFromJson(jarray, guessedType, parent);
                 else if (jprop.Value is JObject)
                     return LoadObjectFromJson(jprop.Value, guessedType, parent);
                 else
+                    //if it's not an array or a dict, it's probably just a raw value like a string or int
                     return Convert.ChangeType(jprop.Value, guessedType);
             }
             else
             {
+                //if all fails, just return the jtoken as a string
+#if LOGGER
                 Logger.WriteLine("couldn't interpret json, must be a string value:" + jtoken);
+#endif
                 return jtoken.ToString();
             }
         }
@@ -70,31 +85,40 @@ namespace ObjectStoring
         /// <param name="objInstance"></param>
         private static void CallOnDoneLoading(ref object objInstance)
         {
+#if PYTHON
             if (objInstance.GetType().ToString().Contains("IronPython"))
             {
-                if (Global.PythonEngine.Operations.ContainsMember(objInstance, "OnDoneLoading"))
+                //for python objects, since IronPython doesn't support Attributes the method has to be named "OnDoneLoading"
+                if (Python.Engine.Operations.ContainsMember(objInstance, "OnDoneLoading"))
                 {
-                    dynamic onDoneLoading = Global.PythonEngine.Operations.GetMember(objInstance, "OnDoneLoading");
+                    dynamic onDoneLoading = Python.Engine.Operations.GetMember(objInstance, "OnDoneLoading");
                     onDoneLoading();
                 }
+#if LOGGER
                 else
                 {
                     Logger.WriteLine("no OnDoneLoading on " + objInstance);
                 }
+#endif
             }
             else
             {
+#endif
                 MethodInfo method = TimelineSaver.SearchMethodWithAttr<OnDoneLoadingAttribute>(objInstance.GetType(),
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if(method != null)
                 {
                     method.Invoke(objInstance, null);
                 }
+#if LOGGER
                 else
                 {
                     Logger.WriteLine("no OnDoneLoading on " + objInstance);
                 }
+#endif
+#if PYTHON
             }
+#endif
         }
 
         /// <summary>
@@ -128,11 +152,15 @@ namespace ObjectStoring
             MemberInfo[] members = objInstance.GetType().GetMember(jprop.Name,
                 MemberTypes.Field | MemberTypes.Property, 
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            if(members.Length > 1)
+#if LOGGER
+            if (members.Length > 1)
                 Logger.WriteLine("found " + members.Length + " members named " + jprop.Name + ", using first one");
+#endif
             if(members.Length == 0)
             {
+#if LOGGER
                 Logger.WriteLine("no member named " + jprop + "on " + objInstance + " skipping it");
+#endif
                 return;
             }
 
@@ -146,10 +174,12 @@ namespace ObjectStoring
             {
                 fieldInfo.SetValue(objInstance, LoadObjectFromJson(jprop, fieldInfo.FieldType, objInstance));
             }
+#if LOGGER
             else
             {
                 Logger.WriteLine("couldn't set property value for " + jprop.Name + " on " + objInstance);
             }
+#endif
         }
 
         /// <summary>
@@ -161,12 +191,12 @@ namespace ObjectStoring
         /// <returns></returns>
         private static bool TryCallCustomLoader(ref object objInstance, JObject jobj)
         {
-            Type type = objInstance.GetType();
-            if (type.ToString().Contains("IronPython"))
+#if PYTHON
+            if (objInstance.GetType().ToString().Contains("IronPython"))
             {
-                if(Global.PythonEngine.Operations.ContainsMember(objInstance, "CustomLoader"))
+                if(Python.Engine.Operations.ContainsMember(objInstance, "CustomLoader"))
                 {
-                    dynamic customLoader = Global.PythonEngine.Operations.GetMember(objInstance, "CustomLoader");
+                    dynamic customLoader = Python.Engine.Operations.GetMember(objInstance, "CustomLoader");
                     customLoader();
                     return true;
                 }
@@ -177,6 +207,7 @@ namespace ObjectStoring
             }
             else
             {
+#endif
                 MethodInfo method = TimelineSaver.SearchMethodWithAttr<CustomLoaderAttribute>(objInstance.GetType(),
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if(method != null)
@@ -188,7 +219,9 @@ namespace ObjectStoring
                 {
                     return false;
                 }
+#if PYTHON
             }
+#endif
         }
 
         /// <summary>
@@ -211,8 +244,10 @@ namespace ObjectStoring
                 {
                     //no create load instance, trying to create with activator and no argument
                     instance = TryCreateInstance(typeString);
-                    if(instance == null)
+#if LOGGER
+                    if (instance == null)
                         Logger.WriteLine("couldn't create instance from type string: " + typeString);
+#endif
                     return instance;
                 }
                 else
@@ -226,8 +261,10 @@ namespace ObjectStoring
                 if(instance == null)
                 {
                     instance = TryCreateInstance(guessedType);
-                    if(instance == null)
+#if LOGGER
+                    if (instance == null)
                         Logger.WriteLine("couldn't create instance of type " + guessedType);
+#endif
                     return instance;
                 }
                 else
@@ -237,31 +274,37 @@ namespace ObjectStoring
             }
             else
             {
+#if LOGGER
                 Logger.WriteLine("no type entry and no guessed type for " + jobj + " returning null instance");
+#endif
                 return null;
             }
         }
 
-        /// <summary>
-        /// try to create an instance of an object with only it's type name
-        /// returns null if the creation failed
-        /// </summary>
-        /// <param name="typeString"></param>
-        /// <returns></returns>
-        private static object TryCreateInstance(string typeString)
+            /// <summary>
+            /// try to create an instance of an object with only it's type name
+            /// returns null if the creation failed
+            /// </summary>
+            /// <param name="typeString"></param>
+            /// <returns></returns>
+            private static object TryCreateInstance(string typeString)
         {
+#if PYTHON
             if (typeString.Contains("IronPython"))
             {
                 CreatableNode creatableNode = CreatableNode.CreatePython(FindFileWithName(typeString));
                 if (creatableNode == null)
                 {
+#if LOGGER
                     Logger.WriteLine("coudln't create CreatableNode python object");
+#endif
                     return null;
                 }
                 return creatableNode.CreateInstance();
             }
             else
             {
+#endif
                 Type type = Type.GetType(typeString);
                 if(type != null)
                 {
@@ -269,10 +312,14 @@ namespace ObjectStoring
                 }
                 else
                 {
-                    Logger.WriteLine("couldn't create type from string:" +typeString);
+#if LOGGER
+                    Logger.WriteLine("couldn't create type from string:" + typeString);
+#endif
                     return null;
                 }
+#if PYTHON
             }
+#endif
         }
 
         /// <summary>
@@ -302,19 +349,22 @@ namespace ObjectStoring
         /// <returns></returns>
         private static object TryCallCreateLoadInstance(string typeString, object parent)
         {
+#if PYTHON
             if (typeString.Contains("IronPython"))
             {
                 CreatableNode creatableNode = CreatableNode.CreatePython(FindFileWithName(typeString));
                 if (creatableNode == null)
                 {
+#if LOGGER
                     Logger.WriteLine("coudln't create CreatableNode python object");
+#endif
                     return null;
                 }
 
-                if (Global.PythonEngine.Operations.GetMemberNames(creatableNode.pythonType).Contains("CreateLoadInstance"))
+                if (Python.Engine.Operations.GetMemberNames(creatableNode.pythonType).Contains("CreateLoadInstance"))
                 {
                     //it has a createLoadInstance method
-                    dynamic createLoadInstance = Global.PythonEngine.Operations
+                    dynamic createLoadInstance = Python.Engine.Operations
                         .GetMember(creatableNode.pythonType, "CreateLoadInstance");
                     return createLoadInstance(parent, typeString);
                 }
@@ -326,6 +376,7 @@ namespace ObjectStoring
             }
             else
             {
+#endif
                 Type type = Type.GetType(typeString);
                 if(type != null)
                 {
@@ -333,10 +384,14 @@ namespace ObjectStoring
                 }
                 else
                 {
+#if LOGGER
                     Logger.WriteLine("couldn't create type from string:" + typeString);
+#endif
                     return null;
                 }
+#if PYTHON
             }
+#endif
         }
 
         /// <summary>
@@ -366,9 +421,12 @@ namespace ObjectStoring
         /// <returns></returns>
         public static object LoadArrayFromJson(JArray jarray, Type guessedType, object parent)
         {
+            //we have to know what type the array is supposed to be
             if (guessedType == null)
             {
+#if LOGGER
                 Logger.WriteLine("guessed type was null in JArray, can't create instance");
+#endif
                 return null;
             }
 
@@ -388,6 +446,7 @@ namespace ObjectStoring
             return arrayInstance;
         }
 
+#if PYTHON
         /// <summary>
         /// search a fil in a directory
         /// </summary>
@@ -441,5 +500,6 @@ namespace ObjectStoring
 
             return string.Empty;
         }
+#endif
     }
 }

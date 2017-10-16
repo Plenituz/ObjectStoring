@@ -1,4 +1,8 @@
-﻿using Microsoft.Scripting.Hosting;
+﻿//#define PYTHON
+#if PYTHON
+using Microsoft.Scripting.Hosting;
+using PythonRunning;
+#endif
 using Newtonsoft.Json;
 using System;
 using System.Collections;
@@ -6,7 +10,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Tools;
 
 namespace ObjectStoring
 {
@@ -122,11 +125,13 @@ namespace ObjectStoring
         public static string GetJsonTypeString(object obj)
         {
             string typeString = obj.GetType().AssemblyQualifiedName;
+#if PYTHON
             if (typeString.Contains("IronPython"))
             {
                 typeString = "IronPython."
-                    + GetPythonTypeString(Global.PythonEngine, obj);
+                    + GetPythonTypeString(Python.Engine, obj);
             }
+#endif
             return typeString;
         }
 
@@ -138,20 +143,23 @@ namespace ObjectStoring
         /// <returns></returns>
         public static Func<object> GetCustomSaver(object obj)
         {
+#if PYTHON
             if (obj.GetType().ToString().Contains("IronPython"))
             {
                 dynamic dyn = obj;
-                if(Global.PythonEngine.Operations.ContainsMember(dyn, "CustomSaver"))
+                if(Python.Engine.Operations.ContainsMember(dyn, "CustomSaver"))
                     return () => dyn.CustomSaver();
             }
             else
             {
+#endif
                 MethodInfo customSaver = SearchMethodWithAttr<CustomSaverAttribute>(obj.GetType(),
                     BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
                 if (customSaver != null)
                     return () => customSaver.Invoke(obj, null);
-
+#if PYTHON
             }
+#endif
             return null;
         }
 
@@ -164,6 +172,7 @@ namespace ObjectStoring
         /// <returns>list of Func that return the property/field value</returns>
         static IEnumerable<SavableMember> ListSavableMembers(object obj)
         {
+#if PYTHON
             if (obj.GetType().ToString().Contains("IronPython"))
             {
                 //Add python AND csharp members to have inheritance
@@ -178,10 +187,14 @@ namespace ObjectStoring
             }
             else
             {
+#endif
                 return ListSavableMembersCSharp(obj);
+#if PYTHON
             }
+#endif
         }
 
+#if PYTHON
         /// <summary>
         /// same as <see cref="ListSavableMembers(object)"/> but only for IronPython objects
         /// in fact <see cref="ListSavableMembers(object)"/> will call this method
@@ -193,7 +206,7 @@ namespace ObjectStoring
             //if it's a python class there won't be any attributes
             //so check the "saveAttrs" class variable
             dynamic dyn = obj;
-            if (Global.PythonEngine.Operations.ContainsMember(dyn, "saveAttrs"))
+            if (Python.Engine.Operations.ContainsMember(dyn, "saveAttrs"))
             {
                 var members = dyn.__dict__;
                 IEnumerable attrsToSave = dyn.saveAttrs;
@@ -206,6 +219,7 @@ namespace ObjectStoring
             }
             return null;
         }
+#endif
 
         /// <summary>
         /// same as <see cref="ListSavableMembers(object)"/> but only for CSharp classes
@@ -263,6 +277,7 @@ namespace ObjectStoring
             return method;
         }
 
+#if PYTHON
         /// <summary>
         /// get the type of an IronPython object
         /// </summary>
@@ -278,6 +293,7 @@ namespace ObjectStoring
             //typeStringDirty=<classname at 0x1232F>
             return typeStringDirty.Substring(1).Split(new char[] { ' ' }, 2)[0];
         }
+#endif
 
     }
 }

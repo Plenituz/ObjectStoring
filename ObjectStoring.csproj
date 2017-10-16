@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ObjectStoring</RootNamespace>
     <AssemblyName>ObjectStoring</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -80,9 +81,13 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Tools\Tools.csproj">
-      <Project>{8E61750E-4A12-4D34-8241-6ECE5935CAEE}</Project>
-      <Name>Tools</Name>
+    <ProjectReference Include="..\Global\Global.csproj">
+      <Project>{4042c34c-e37d-4a07-83ab-cb3ca3bd26b5}</Project>
+      <Name>Global</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PythonRunning\PythonRunning.csproj">
+      <Project>{4B4F818B-BD72-4511-AAB0-E288D13845A5}</Project>
+      <Name>PythonRunning</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
