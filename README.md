@@ -15,10 +15,17 @@ This won't compile as provided, you will need to change some things since it dep
 Note 2: 
 Any element that will be part of an array and have a reference to the object storing the array can implement the IHasHost interface. 
 For example if you have :
-class Holder:
-  - List<Item> items;
-class Item:
-  - Holder parent;
+
+```c#
+class Holder{
+   List<Item> items;
+}
+
+class Item{
+  Holder parent;
+}
+```
+
 the Item class can implement IHasHost and the SetHost method will be called uppon loading the "items" list with the reference to the instance of Holder
 
 Note 3:
