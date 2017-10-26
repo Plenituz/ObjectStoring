@@ -8,13 +8,15 @@ namespace ObjectStoring
     /// so this method must return an object that will get written to json 
     /// example :
     /// 
-    ///[CustomSaver]
-    ///object OnSave()
+    ///[CustomLoader]
+    ///void OnLoad(JObject jobj)
     ///{
-    ///    return properties
-    ///        .ToDictionary(
-    ///           pair => pair.Key,
-    ///           pair => TimelineSaver.SaveObjectToJson(pair.Value));
+    ///    //the jobject contains the list of properties
+    ///    foreach (JProperty jprop in jobj.Properties())
+    ///    {
+    ///        object instance = TimelineLoader.LoadObjectFromJson(jprop, null, this);
+    ///        properties.Add(jprop.Name, (NodePropertyBase)instance);
+    ///    }
     ///}
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]

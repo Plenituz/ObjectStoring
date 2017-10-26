@@ -68,11 +68,15 @@ namespace ObjectStoring
                     //if it's not an array or a dict, it's probably just a raw value like a string or int
                     return Convert.ChangeType(jprop.Value, guessedType);
             }
-            else
+            else if(jtoken is JValue jvalue)
             {
                 //if all fails, just return the jtoken as a string
+                return jvalue.Value;
+            }
+            else
+            {
 #if LOGGER
-                Logger.WriteLine("couldn't interpret json, must be a string value:" + jtoken);
+                Logger.WriteLine("couldn't interpret json:" + jtoken);
 #endif
                 return jtoken.ToString();
             }
@@ -197,7 +201,7 @@ namespace ObjectStoring
                 if(Python.Engine.Operations.ContainsMember(objInstance, "CustomLoader"))
                 {
                     dynamic customLoader = Python.Engine.Operations.GetMember(objInstance, "CustomLoader");
-                    customLoader();
+                    customLoader(jobj);
                     return true;
                 }
                 else
@@ -292,7 +296,7 @@ namespace ObjectStoring
 #if PYTHON
             if (typeString.Contains("IronPython"))
             {
-                CreatableNode creatableNode = CreatableNode.CreatePython(FindFileWithName(typeString));
+                CreatableNode creatableNode = CreatableNode.CreateDynamic(FindFileWithName(typeString));
                 if (creatableNode == null)
                 {
 #if LOGGER
@@ -352,7 +356,7 @@ namespace ObjectStoring
 #if PYTHON
             if (typeString.Contains("IronPython"))
             {
-                CreatableNode creatableNode = CreatableNode.CreatePython(FindFileWithName(typeString));
+                CreatableNode creatableNode = CreatableNode.CreateDynamic(FindFileWithName(typeString));
                 if (creatableNode == null)
                 {
 #if LOGGER
@@ -432,10 +436,16 @@ namespace ObjectStoring
 
             //create array instance 
             IList arrayInstance = (IList)Activator.CreateInstance(guessedType);
+            Type itemExpectedType = null;
+            if (guessedType.IsGenericType)
+                itemExpectedType = guessedType.GenericTypeArguments[0];
+
             //populate it by calling LoadObjectFromJson on each item 
-            for(int i = 0; i < jarray.Count; i++)
+            for (int i = 0; i < jarray.Count; i++)
             {
                 object obj = LoadObjectFromJson(jarray[i], parent: parent);
+                if (!itemExpectedType.IsAssignableFrom(obj.GetType()))
+                    obj = Convert.ChangeType(obj, itemExpectedType);
                 arrayInstance.Add(obj);
                 if(obj is IHasHost hasHost)
                 {

@@ -124,13 +124,19 @@ namespace ObjectStoring
         /// <returns></returns>
         public static string GetJsonTypeString(object obj)
         {
-            string typeString = obj.GetType().AssemblyQualifiedName;
+            Type objType = obj.GetType();
+            string typeString = objType.AssemblyQualifiedName;
 #if PYTHON
-            if (typeString.Contains("IronPython"))
+            Type dynamicType =  Type.GetType("NodeSystem.Utils.IDynamicNode, Tools");
+            if (dynamicType.IsAssignableFrom(objType))
             {
-                typeString = "IronPython."
-                    + GetPythonTypeString(Python.Engine, obj);
+                typeString = "IronPython." + Python.GetClassName(obj);
             }
+            //else if (typeString.Contains("IronPython"))
+            //{
+            //    typeString = "IronPython."
+            //        + GetPythonTypeString(Python.Engine, obj);
+            //}
 #endif
             return typeString;
         }
