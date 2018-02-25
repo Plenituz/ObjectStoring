@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ObjectStoring
+namespace Motio.ObjectStoring
 {
     /// <summary>
     /// a static method marked with this will be called when loading a file
@@ -19,7 +19,7 @@ namespace ObjectStoring
     ///    return new AnimationTimeline();
     /// }
     /// </summary>
-[AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
+    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
     public sealed class CreateLoadInstanceAttribute : Attribute
     {
         public CreateLoadInstanceAttribute()

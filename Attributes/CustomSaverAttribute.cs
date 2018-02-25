@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ObjectStoring
+namespace Motio.ObjectStoring
 {
     /// <summary>
     /// method marked with this will be called instead of the usual

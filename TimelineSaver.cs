@@ -1,8 +1,4 @@
-﻿//#define PYTHON
-#if PYTHON
-using Microsoft.Scripting.Hosting;
-using PythonRunning;
-#endif
+﻿#define LOGGER
 using Newtonsoft.Json;
 using System;
 using System.Collections;
@@ -10,8 +6,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Motio.Debuging;
 
-namespace ObjectStoring
+namespace Motio.ObjectStoring
 {
     /// <summary>
     /// Save any object into a JSON file, taking in account any of the save related attributes:
@@ -20,45 +17,24 @@ namespace ObjectStoring
     /// </summary>
     public class TimelineSaver
     {
-        /// <summary>
-        /// helper class to store a name an a value
-        /// </summary>
-        class SavableMember
-        {
-            public string name;
-            public object value;
-
-            public SavableMember(string name, object value)
-            {
-                this.name = name;
-                this.value = value;
-            }
-        }
-
-        object timeline;
-
-        public TimelineSaver(object timeline)
-        {
-            this.timeline = timeline;
-        }
+        public const string TYPE_NAME = "__type__";
+        private static ISavableManager manager;
 
         /// <summary>
         /// save the "timeline" object into the given path as a json file
         /// </summary>
         /// <param name="path"></param>
-        public void Save(string path)
+        public static object Save(object timeline, ISavableManager manager)
         {
-            object dct = SaveObjectToJson(timeline);
+            TimelineSaver.manager = manager;
             try
             {
-                string json = JsonConvert.SerializeObject(dct, Formatting.Indented);
-                File.WriteAllText(path, json);
+                object dct = SaveObjectToJson(timeline);
+                return dct;
             }
-            catch (Exception e)
+            finally
             {
-                throw new Exception("Error converting to Json:\n" + e +
-                    "\n\nDid you make sur to have a def CustomSaver(self)" +
-                    " on all the python attributes that are listed in saveAttrs ?\n");
+                TimelineSaver.manager = null;
             }
         }
 
@@ -68,12 +44,13 @@ namespace ObjectStoring
         /// </summary>
         /// <param name="obj"></param>
         /// <returns></returns>
-        public static object SaveObjectToJson(object obj)
+        public static object SaveObjectToJson(object obj, bool asBase = false)
         {
             //check if it has custom saver
             //if it does use it
             //if not list savable members and call saveObjecttojson on them
-            Func<object> customSaver = GetCustomSaver(obj);
+
+            Func<object> customSaver = GetCustomSaver(obj, asBase);
             if (customSaver != null)
                 return customSaver.Invoke();
 
@@ -87,14 +64,23 @@ namespace ObjectStoring
                 if (obj.GetType().GetInterfaces().Contains(typeof(ICollection)))
                     return SaveCollectionToJson((ICollection)obj);
                 else
+                    //here it's either an object that has no [SaveMe] member or a value type. Let JsonConvert deal with it
                     return obj;
             }
             Dictionary<string, object> jsonDict = new Dictionary<string, object>();
             foreach(SavableMember savableMember in savableMembers)
             {
+                if(savableMember.value == null)
+                {
+#if LOGGER
+                    Logger.WriteLine("member " + savableMember.name + " is null while saving");
+#endif
+                    jsonDict.Add(savableMember.name, null);
+                    continue;
+                }
                 jsonDict.Add(savableMember.name, SaveObjectToJson(savableMember.value));
             }
-            jsonDict.Add("type", GetJsonTypeString(obj));
+            jsonDict.Add(TimelineSaver.TYPE_NAME, GetJsonTypeString(obj));
             return jsonDict;
             //check if the list is not null if it is, stop the recursion here
         }
@@ -117,7 +103,7 @@ namespace ObjectStoring
         }
 
         /// <summary>
-        /// get the type of the given object to store into a "type" attribute
+        /// get the type of the given object to store into a <see cref="TimelineSaver.TYPE_NAME"/> attribute
         /// this takes in accout the possibility of having IronPython objects in the mix
         /// </summary>
         /// <param name="obj"></param>
@@ -126,18 +112,11 @@ namespace ObjectStoring
         {
             Type objType = obj.GetType();
             string typeString = objType.AssemblyQualifiedName;
-#if PYTHON
-            Type dynamicType =  Type.GetType("NodeSystem.Utils.IDynamicNode, Tools");
-            if (dynamicType.IsAssignableFrom(objType))
+            
+            if(manager?.ShouldManageObject(obj) == true)
             {
-                typeString = "IronPython." + Python.GetClassName(obj);
+                typeString = manager.GetTypeString(obj);
             }
-            //else if (typeString.Contains("IronPython"))
-            //{
-            //    typeString = "IronPython."
-            //        + GetPythonTypeString(Python.Engine, obj);
-            //}
-#endif
             return typeString;
         }
 
@@ -147,25 +126,19 @@ namespace ObjectStoring
         /// </summary>
         /// <param name="obj"></param>
         /// <returns></returns>
-        public static Func<object> GetCustomSaver(object obj)
+        public static Func<object> GetCustomSaver(object obj, bool asBase = false)
         {
-#if PYTHON
-            if (obj.GetType().ToString().Contains("IronPython"))
+            if(manager?.ShouldManageObject(obj) == true)
             {
-                dynamic dyn = obj;
-                if(Python.Engine.Operations.ContainsMember(dyn, "CustomSaver"))
-                    return () => dyn.CustomSaver();
+                return manager.GetCustomSaver(obj, asBase);
             }
             else
             {
-#endif
                 MethodInfo customSaver = SearchMethodWithAttr<CustomSaverAttribute>(obj.GetType(),
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, asBase ? 1 : 0);
                 if (customSaver != null)
                     return () => customSaver.Invoke(obj, null);
-#if PYTHON
             }
-#endif
             return null;
         }
 
@@ -178,54 +151,15 @@ namespace ObjectStoring
         /// <returns>list of Func that return the property/field value</returns>
         static IEnumerable<SavableMember> ListSavableMembers(object obj)
         {
-#if PYTHON
-            if (obj.GetType().ToString().Contains("IronPython"))
+            if(manager?.ShouldManageObject(obj) == true)
             {
-                //Add python AND csharp members to have inheritance
-                var list = new List<SavableMember>();
-                var listPython = ListSavableMembersPython(obj);
-                var listCSharp = ListSavableMembersCSharp(obj);
-                if (listPython != null)
-                    list.AddRange(listPython);
-                if (listCSharp != null)
-                    list.AddRange(listCSharp);
-                return list;
+                return manager.GetSavableMembers(obj);
             }
             else
             {
-#endif
                 return ListSavableMembersCSharp(obj);
-#if PYTHON
             }
-#endif
         }
-
-#if PYTHON
-        /// <summary>
-        /// same as <see cref="ListSavableMembers(object)"/> but only for IronPython objects
-        /// in fact <see cref="ListSavableMembers(object)"/> will call this method
-        /// </summary>
-        /// <param name="obj"></param>
-        /// <returns></returns>
-        private static IEnumerable<SavableMember> ListSavableMembersPython(object obj)
-        {
-            //if it's a python class there won't be any attributes
-            //so check the "saveAttrs" class variable
-            dynamic dyn = obj;
-            if (Python.Engine.Operations.ContainsMember(dyn, "saveAttrs"))
-            {
-                var members = dyn.__dict__;
-                IEnumerable attrsToSave = dyn.saveAttrs;
-                List<SavableMember> savableMembers = new List<SavableMember>();
-                foreach(string str in attrsToSave)
-                {
-                    savableMembers.Add(new SavableMember(str, members[str]));
-                }
-                return savableMembers;
-            }
-            return null;
-        }
-#endif
 
         /// <summary>
         /// same as <see cref="ListSavableMembers(object)"/> but only for CSharp classes
@@ -233,7 +167,7 @@ namespace ObjectStoring
         /// </summary>
         /// <param name="obj"></param>
         /// <returns></returns>
-        private static IEnumerable<SavableMember> ListSavableMembersCSharp(object obj)
+        public static IEnumerable<SavableMember> ListSavableMembersCSharp(object obj)
         {
             List<SavableMember> list = new List<SavableMember>();
 
@@ -266,7 +200,7 @@ namespace ObjectStoring
         /// <param name="type"></param>
         /// <param name="flags"></param>
         /// <returns></returns>
-        public static MethodInfo SearchMethodWithAttr<AttrFilter>(Type type, BindingFlags flags)
+        public static MethodInfo SearchMethodWithAttr<AttrFilter>(Type type, BindingFlags flags, int skip = 0)
             where AttrFilter : Attribute
         {
             MethodInfo method = null;
@@ -279,27 +213,14 @@ namespace ObjectStoring
                         .Count() != 0)
                     .FirstOrDefault();
                 type = type.BaseType;
+                //skip a certain number of method, allows for calling "base" methods
+                if(method != null && skip > 0)
+                {
+                    skip--;
+                    method = null;
+                }
             } while (method == null && type != null);
             return method;
         }
-
-#if PYTHON
-        /// <summary>
-        /// get the type of an IronPython object
-        /// </summary>
-        /// <param name="engine"></param>
-        /// <param name="obj"></param>
-        /// <returns></returns>
-        public static string GetPythonTypeString(ScriptEngine engine, dynamic obj)
-        {
-            var classMember = engine.Operations.GetMember(obj, "__class__");
-            var str = engine.Operations.GetMember(classMember, "__str__");
-            string typeStringDirty = str(obj);
-            //extract the first word
-            //typeStringDirty=<classname at 0x1232F>
-            return typeStringDirty.Substring(1).Split(new char[] { ' ' }, 2)[0];
-        }
-#endif
-
     }
 }

@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("ObjectLoader")]
+[assembly: AssemblyTitle("ObjectStoring")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("ObjectLoader")]
+[assembly: AssemblyProduct("ObjectStoring")]
 [assembly: AssemblyCopyright("Copyright ©  2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("5253be3c-1109-4138-8165-6e1d18aafe09")]
+[assembly: Guid("6109f5a5-86e0-4dde-8c33-c9731f19d6ad")]
 
 // Version information for an assembly consists of the following four values:
 //

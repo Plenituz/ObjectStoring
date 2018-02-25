@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ObjectStoring
+namespace Motio.ObjectStoring
 {
     /// <summary>
     /// a method marked with this attribute will be called when the object gets loaded 

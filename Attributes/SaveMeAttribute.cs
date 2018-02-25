@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ObjectStoring
+namespace Motio.ObjectStoring
 {
     /// <summary>
     /// any property or field marked with this attribute will be saved in the json file
