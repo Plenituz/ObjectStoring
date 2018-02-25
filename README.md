@@ -137,8 +137,9 @@ class Item{
 the Item class can implement IHasHost and the SetHost method will be called uppon loading the "items" list with the reference to the instance of Holder
 
 Note 2:
-If you want to use this with IronPython objects notice I handled the creation of python instances in another class called "CreatableNode". 
-You will need to create your own way of creating a python instance (and a PythonType) from the path to a .py file.
-You should also provide a list of directories to search for python files in FindFileWithName(string name).dirsToSearch
+If you have a some objects that can't be created/read using the attribute system, 
+you can implement ICreatableProvider and ISavableManager and provide an instance
+while loading/saving. 
 
 
+This is a module extracted from [Water Motion](https://plenicorp.com) my motion graphics software.
