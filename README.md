@@ -134,7 +134,7 @@ class Item{
 }
 ```
 
-the Item class can implement IHasHost and the SetHost method will be called uppon loading the "items" list with the reference to the instance of Holder
+the Item class can implement ISetParent and the SetParent method will be called uppon loading the `items` list with the reference to the instance of `Holder`
 
 Note 2:
 If you have a some objects that can't be created/read using the attribute system, 
